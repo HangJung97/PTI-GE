@@ -46,23 +46,19 @@ class UNet(nn.Module):
         self.layer3 = _Down(init_channels, init_channels * 2, dropout, use_batchnorm)
         self.layer4 = _Down(init_channels * 2, init_channels * 4, dropout, use_batchnorm)
         self.layer5 = _Down(init_channels * 4, init_channels * 8, dropout, use_batchnorm)
-        self.layer6 = _Down(init_channels * 8, init_channels * 16, dropout, use_batchnorm)
 
-        self.layer7 = _Up(
-            init_channels * 16, init_channels * 8, dropout, use_batchnorm, bilinear=bilinear
-        )
-        self.layer8 = _Up(
+        self.layer6 = _Up(
             init_channels * 8, init_channels * 4, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.layer9 = _Up(
+        self.layer7 = _Up(
             init_channels * 4, init_channels * 2, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.layer10 = _Up(
+        self.layer8 = _Up(
             init_channels * 2, init_channels, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.layer11 = _Up(init_channels, init_channels // 2, 0, use_batchnorm, bilinear=bilinear)
+        self.layer9 = _Up(init_channels, init_channels // 2, 0, use_batchnorm, bilinear=bilinear)
 
-        self.layer12 = nn.Conv2d(init_channels // 2, out_channels, kernel_size=1)
+        self.layer10 = nn.Conv2d(init_channels // 2, out_channels, kernel_size=1)
 
         # Use Xavier initialisation for weights
         for m in self.modules():
@@ -83,15 +79,13 @@ class UNet(nn.Module):
         x3 = self.layer3(x2)
         x4 = self.layer4(x3)
         x5 = self.layer5(x4)
-        x6 = self.layer6(x5)
 
-        out = self.layer7(x6, x5)
-        out = self.layer8(out, x4)
-        out = self.layer9(out, x3)
-        out = self.layer10(out, x2)
-        out = self.layer11(out, x1)
+        out = self.layer6(x5, x4)
+        out = self.layer7(out, x3)
+        out = self.layer8(out, x2)
+        out = self.layer9(out, x1)
 
-        return self.layer12(out)
+        return self.layer10(out)
 
 
 class _DoubleConv(nn.Module):
@@ -173,3 +167,12 @@ class _Up(nn.Module):
         x = torch.cat([connected_encoder_features, x], dim=1)
 
         return self.conv(x)
+
+
+if __name__ == "__main__":
+    from torchinfo import summary
+
+    input_shape = (1, 64, 64)
+    output_shape = (4, 64, 64)
+    unet = UNet(input_shape, output_shape)
+    summary(unet, (1, *input_shape), device="cpu")

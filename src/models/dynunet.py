@@ -3,7 +3,6 @@ from typing import Union
 import numpy as np
 import torch
 from torch import Tensor, nn
-from torchsummary import summary
 
 from src.models.layers import ConvBlock, OutputBlock, ResidBlock, UpsampleBlock
 
@@ -235,10 +234,12 @@ class DynUNet(nn.Module):
 
 
 if __name__ == "__main__":
+    from torchinfo import summary
+
     kernels = ((3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3))
     strides = ((1, 1), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2))
     patch_size = (640, 512)
     unet = DynUNet(1, 3, patch_size, kernels, strides)
-    summary(unet, (1, *patch_size), device="cpu")
+    summary(unet, (1, 1, *patch_size), device="cpu")
     dummy_input = torch.rand((2, 1, 640, 512))
     out = unet(dummy_input)
