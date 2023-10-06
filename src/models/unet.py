@@ -1,240 +1,175 @@
-from typing import Union
+from typing import Tuple
 
-import numpy as np
 import torch
-from torch import Tensor, nn
-from torchsummary import summary
-
-from src.models.layers import ConvBlock, OutputBlock, ResidBlock, UpsampleBlock
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
 
 
 class UNet(nn.Module):
-    """A generic U-Net that can be instantiated dynamically."""
+    """Architecture based on U-Net: Convolutional Networks for Biomedical Image Segmentation.
+
+    Retrieved from:
+    https://github.com/vitalab/vital/blob/dev/vital/models/segmentation/unet.py
+
+    References:
+    - Paper that introduced the U-Net model: https://arxiv.org/abs/1505.04597
+    """
 
     def __init__(
         self,
-        in_channels: int,
-        num_classes: int,
-        patch_size: tuple[int, ...],
-        kernels: tuple[Union[int, tuple[int, ...]], ...],
-        strides: tuple[Union[int, tuple[int, ...]], ...],
-        normalization_layer: str = "instance",
-        negative_slope: float = 1e-2,
-        deep_supervision: bool = True,
-        attention: bool = False,
-        drop_block: bool = False,
-        residual: bool = False,
-        out_seg_bias: bool = False,
-    ) -> None:
-        """Initialize class instance.
+        input_shape: Tuple[int, ...],
+        output_shape: Tuple[int, ...],
+        init_channels: int = 32,
+        use_batchnorm: bool = True,
+        bilinear: bool = False,
+        dropout: float = 0.0,
+    ):
+        """Initializes class instance.
 
         Args:
-            in_channels: Number of input channels.
-            num_classes: Total number of classes in the dataset including background.
-            patch_size: Input patch size according to which the data will be cropped. Can be 2D or
-                3D.
-            kernels: Tuples of tuples containing convolution kernel size of the first convolution layer
-                of each double convolutions block.
-            strides: Tuples of tuples containing convolution strides of the first convolution layer
-                of each double convolutions block.
-            normalization_layer: Normalization to use. Can be 'batch', 'instance' or 'groupnorm'.
-            negative_slope: Negative slope used in LeakyRELU.
-            deep_supervision: Whether to use deep supervision.
-            attention: Whether to use attention module.
-            drop_block: Whether to use drop out layers.
-            residual: Whether to use residual block.
-            out_seg_bias: Whether to include trainable bias in the output segmentation layers.
-
-        Raises:
-            NotImplementedError: Error when input patch size is neither 2D nor 3D.
+            input_shape: (in_channels, H, W), Shape of the input images.
+            output_shape: (num_classes, H, W), Shape of the output segmentation map.
+            init_channels: Number of output feature maps from the first layer, used to compute the number of feature
+                maps in following layers.
+            use_batchnorm: Whether to use batch normalization between the convolution and activation layers in the
+                convolutional blocks.
+            bilinear: Whether to use bilinear interpolation or transposed convolutions for upsampling.
+            dropout: Probability of an element to be zeroed (e.g. 0 means no dropout).
         """
         super().__init__()
-        if not len(patch_size) in [2, 3]:
-            raise NotImplementedError("Only 2D and 3D patches are supported right now!")
+        in_channels = input_shape[0]
+        out_channels = output_shape[0]
 
-        self.patch_size = patch_size
-        self.dim = len(patch_size)
-        self.in_channels = in_channels
-        self.num_classes = num_classes
-        self.attention = attention
-        self.residual = residual
-        self.out_seg_bias = out_seg_bias
-        self.negative_slope = negative_slope
-        self.deep_supervision = deep_supervision
-        self.norm = normalization_layer + f"norm{self.dim}d"
-        self.filters = [
-            min(2 ** (5 + i), 320 if self.dim == 3 else 480) for i in range(len(strides))
-        ]
+        self.layer1 = _DoubleConv(in_channels, init_channels // 2, dropout / 2, use_batchnorm)
+        self.layer2 = _Down(init_channels // 2, init_channels, dropout, use_batchnorm)
+        self.layer3 = _Down(init_channels, init_channels * 2, dropout, use_batchnorm)
+        self.layer4 = _Down(init_channels * 2, init_channels * 4, dropout, use_batchnorm)
+        self.layer5 = _Down(init_channels * 4, init_channels * 8, dropout, use_batchnorm)
+        self.layer6 = _Down(init_channels * 8, init_channels * 16, dropout, use_batchnorm)
 
-        down_block = ResidBlock if self.residual else ConvBlock
-        self.input_block = self.get_conv_block(
-            conv_block=down_block,
-            in_channels=in_channels,
-            out_channels=self.filters[0],
-            kernel_size=kernels[0],
-            stride=strides[0],
+        self.layer7 = _Up(
+            init_channels * 16, init_channels * 8, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.downsamples = self.get_module_list(
-            conv_block=down_block,
-            in_channels=self.filters[:-1],
-            out_channels=self.filters[1:],
-            kernels=kernels[1:-1],
-            strides=strides[1:-1],
-            drop_block=drop_block,
+        self.layer8 = _Up(
+            init_channels * 8, init_channels * 4, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.bottleneck = self.get_conv_block(
-            conv_block=down_block,
-            in_channels=self.filters[-2],
-            out_channels=self.filters[-1],
-            kernel_size=kernels[-1],
-            stride=strides[-1],
-            drop_block=drop_block,
+        self.layer9 = _Up(
+            init_channels * 4, init_channels * 2, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.upsamples = self.get_module_list(
-            conv_block=UpsampleBlock,
-            in_channels=self.filters[1:][::-1],
-            out_channels=self.filters[:-1][::-1],
-            kernels=kernels[1:][::-1],
-            strides=strides[1:][::-1],
+        self.layer10 = _Up(
+            init_channels * 2, init_channels, dropout, use_batchnorm, bilinear=bilinear
         )
-        self.output_block = self.get_output_block(decoder_level=0)
-        self.deep_supervision_heads = self.get_deep_supervision_heads()
-        self.apply(self.initialize_weights)
+        self.layer11 = _Up(init_channels, init_channels // 2, 0, use_batchnorm, bilinear=bilinear)
 
-    def forward(self, input_data: Tensor) -> Tensor:  # noqa: D102
-        out = self.input_block(input_data)
-        encoder_outputs = [out]
-        for downsample in self.downsamples:
-            out = downsample(out)
-            encoder_outputs.append(out)
-        out = self.bottleneck(out)
-        decoder_outputs = []
-        for upsample, skip in zip(self.upsamples, reversed(encoder_outputs)):
-            out = upsample(out, skip)
-            decoder_outputs.append(out)
-        out = self.output_block(out)
-        if self.training and self.deep_supervision:
-            out = [out]
-            for i, decoder_out in enumerate(decoder_outputs[2:-1][::-1]):
-                out.append(self.deep_supervision_heads[i](decoder_out))
-        return out
+        self.layer12 = nn.Conv2d(init_channels // 2, out_channels, kernel_size=1)
 
-    def get_conv_block(
-        self,
-        conv_block: nn.Module,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: list,
-        stride: list,
-        drop_block: bool = False,
-    ) -> nn.Module:
-        """Build a double convolutions block.
+        # Use Xavier initialisation for weights
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                nn.init.xavier_uniform_(m.weight)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Defines the computation performed at every call.
 
         Args:
-            conv_block: Convolution block. Can be usual double convolutions block or with residual
-                connections or with attention modules.
-            in_channels: Number of input channels.
-            out_channels: Number of output channels.
-            kernel_size: List containing convolution kernel size of the first convolution layer
-                of double convolutions block.
-            strides: List containing convolution strides of the first convolution layer
-                of double convolutions block.
-            drop_block: Whether to use drop out layers.
+            x: (N, ``in_channels``, H, W), Input image to segment.
 
         Returns:
-            Double convolutions block.
+            (N, ``out_channels``, H, W), Raw, unnormalized scores for each class in the input's segmentation.
         """
-        return conv_block(
-            dim=self.dim,
-            stride=stride,
-            norm=self.norm,
-            drop_block=drop_block,
-            kernel_size=kernel_size,
-            in_channels=in_channels,
-            attention=self.attention,
-            out_channels=out_channels,
-            negative_slope=self.negative_slope,
-        )
+        x1 = self.layer1(x)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+        x4 = self.layer4(x3)
+        x5 = self.layer5(x4)
+        x6 = self.layer6(x5)
 
-    def get_output_block(self, decoder_level: int) -> nn.Module:
-        """Build the output convolution layer of the specified decoder layer.
+        out = self.layer7(x6, x5)
+        out = self.layer8(out, x4)
+        out = self.layer9(out, x3)
+        out = self.layer10(out, x2)
+        out = self.layer11(out, x1)
 
-        Args:
-            decoder_level: Level of decoder.
+        return self.layer12(out)
 
-        Returns:
-            Output convolution layer.
-        """
-        return OutputBlock(
-            in_channels=self.filters[decoder_level],
-            out_channels=self.num_classes,
-            dim=self.dim,
-            bias=self.out_seg_bias,
-        )
 
-    def get_deep_supervision_heads(self) -> nn.ModuleList:
-        """Build the deep supervision heads of all decoder levels except the two lowest
-        resolutions.
+class _DoubleConv(nn.Module):
+    """Double Convolution and BN and ReLU.
 
-        Returns:
-            ModuleList of all deep supervision heads.
-        """
-        return nn.ModuleList(
-            [self.get_output_block(i + 1) for i in range(len(self.upsamples) - 1)]
-        )
+    (3x3 conv -> BN -> ReLU) ** 2
+    """
 
-    def get_module_list(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernels: tuple[Union[int, tuple[int, ...]], ...],
-        strides: tuple[Union[int, tuple[int, ...]], ...],
-        conv_block: nn.Module,
-        drop_block: bool = False,
-    ) -> nn.ModuleList:
-        """Combine multiple convolution blocks to form a ModuleList.
-
-        Args:
-            in_channels: Number of input channels.
-            out_channels: Number of output channels.
-            kernels: Tuples of tuples containing convolution kernel size of the first convolution layer
-                of each double convolutions block.
-            strides: Tuples of tuples containing convolution strides of the first convolution layer
-                of each double convolutions block.
-            conv_block: Convolution block to use.
-            drop_block: Whether to use drop out layers.
-
-        Returns:
-            ModuleList of chained convolution blocks.
-        """
-        layers = []
-        for i, (in_channel, out_channel, kernel, stride) in enumerate(
-            zip(in_channels, out_channels, kernels, strides)
-        ):
-            use_drop_block = drop_block and len(in_channels) - i <= 2
-            conv_layer = self.get_conv_block(
-                conv_block, in_channel, out_channel, kernel, stride, use_drop_block
+    def __init__(self, in_ch: int, out_ch: int, dropout_prob: float, use_batchnorm: bool):
+        super().__init__()
+        if use_batchnorm:
+            self.net = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_prob),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_prob),
             )
-            layers.append(conv_layer)
-        return nn.ModuleList(layers)
+        else:
+            self.net = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_prob),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout_prob),
+            )
 
-    def initialize_weights(self, module: nn.Module) -> None:
-        """Initialize the weights of all nn Modules using Kaimimg normal initialization.
-
-        Args:
-            module: nn.Module for weight initialization.
-        """
-        if isinstance(module, (nn.Conv3d, nn.Conv2d, nn.ConvTranspose3d, nn.ConvTranspose2d)):
-            module.weight = nn.init.kaiming_normal_(module.weight, a=self.negative_slope)
-            if module.bias is not None:
-                module.bias = nn.init.constant_(module.bias, 0)
+    def forward(self, x: Tensor) -> Tensor:
+        return self.net(x)
 
 
-if __name__ == "__main__":
-    kernels = ((3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3), (3, 3))
-    strides = ((1, 1), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2))
-    patch_size = (640, 512)
-    unet = UNet(1, 3, patch_size, kernels, strides)
-    summary(unet, (1, *patch_size), device="cpu")
-    dummy_input = torch.rand((2, 1, 640, 512))
-    out = unet(dummy_input)
+class _Down(nn.Module):
+    """Combination of MaxPool2d and DoubleConv in series."""
+
+    def __init__(self, in_ch: int, out_ch: int, dropout_prob: float, use_batchnorm: bool):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            _DoubleConv(in_ch, out_ch, dropout_prob, use_batchnorm),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:  # noqa: D102
+        return self.net(x)
+
+
+class _Up(nn.Module):
+    """Upsampling (by either bilinear interpolation or transpose convolutions).
+
+    followed by concatenation of feature map from contracting path, followed by double 3x3
+    convolution.
+    """
+
+    def __init__(
+        self, in_ch, out_ch: int, dropout_prob: float, use_batchnorm: bool, bilinear: bool = False
+    ):
+        super().__init__()
+        self.upsample = None
+        if bilinear:
+            self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+        else:
+            self.upsample = nn.ConvTranspose2d(in_ch, in_ch // 2, kernel_size=2, stride=2)
+
+        self.conv = _DoubleConv(in_ch, out_ch, dropout_prob, use_batchnorm)
+
+    def forward(self, x: Tensor, connected_encoder_features: Tensor) -> Tensor:
+        x = self.upsample(x)
+
+        # Pad ``x`` to the size of ``connected_encoder_features``
+        diff_h = connected_encoder_features.shape[2] - x.shape[2]
+        diff_w = connected_encoder_features.shape[3] - x.shape[3]
+
+        x = F.pad(x, [diff_w // 2, diff_w - diff_w // 2, diff_h // 2, diff_h - diff_h // 2])
+
+        # Concatenate along the channels axis
+        x = torch.cat([connected_encoder_features, x], dim=1)
+
+        return self.conv(x)
