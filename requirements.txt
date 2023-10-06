@@ -11,3 +11,4 @@ einops          # useful tensor/array operations
 tqdm            # progress bar
 torchsummary    # model summary
 tensorboardX    # logging
+jupyterlab      # jupyter notebook
