@@ -6,9 +6,12 @@ torchmetrics
 # --------- others --------- #
 matplotlib      # plotting
 SimpleITK       # read/write io for data
+nibabel         # read/write io for nifti data
 monai           # data loading and transforms
 einops          # useful tensor/array operations
 tqdm            # progress bar
 torchinfo       # model summary
 tensorboardX    # logging
 jupyterlab      # jupyter notebook
+scikit-image    # image processing
+scikit-learn    # machine learning
