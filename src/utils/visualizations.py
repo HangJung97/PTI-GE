@@ -16,6 +16,7 @@ def imagesc(
     clim: Optional[tuple[float, float]] = None,
     show_axis: bool = False,
     show_colorbar: bool = True,
+    **kwargs,
 ) -> None:
     """Display image with scaled colors. Similar to Matlab's imagesc.
 
@@ -27,11 +28,12 @@ def imagesc(
         clim: Colormap limits.
         show_axis: Whether to show axis when plotting.
         show_colorbar: Whether to show colorbar when plotting.
+        **kwargs: Keyword arguments to be passed to `imshow`.
 
     Example:
         >>> plt.figure("image", (18, 6))
         >>> ax = plt.subplot(1, 2, 1)
-        >>> imagesc(ax, np.random.rand(100,100), "image", clim=[-1, 1])
+        >>> imagesc(ax, np.random.rand(100,100), "image", clim=(-1, 1))
         >>> plt.show()
     """
 
@@ -49,7 +51,7 @@ def imagesc(
     if isinstance(image, Tensor):
         image = image.cpu().detach().numpy()
 
-    im = ax.imshow(image, colormap, **clim_args)
+    im = ax.imshow(image, colormap, **clim_args, **kwargs)
     plt.title(title)
 
     if show_colorbar:
