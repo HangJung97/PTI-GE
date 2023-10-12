@@ -1,8 +1,15 @@
 <div align="center">
 
-<a href="https://www.insa-lyon.fr/"> <img src="https://www.insa-lyon.fr/sites/www.insa-lyon.fr/files/logo-coul.png" width="50%" /></a>
+<div float="left" style="background-color: white;">
+   <a href="https://www.creatis.insa-lyon.fr/site/en">
+      <img src="https://www.creatis.insa-lyon.fr/site/sites/default/files/logo-creatis_0-1.png" width="25%" />
+   </a>
+   <a href="https://www.insa-lyon.fr">
+      <img src="https://www.insa-lyon.fr/sites/www.insa-lyon.fr/files/logo-coul.png" width="25%" />
+   </a>
+</div>
 
-# PTI Project for the TDSI Option of the Electrical Engineering (GE) Department of INSA Lyon <!-- omit in toc -->
+# PyTorch Hands On <!-- omit in toc -->
 
 [![python](https://img.shields.io/badge/-Python_3.9_%7C_3.10-blue?logo=python&logoColor=white)](https://github.com/pre-commit/pre-commit)
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
@@ -15,6 +22,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/HangJung97/PTI-GE/blob/main/LICENSE)
 
 </div>
+
+# Description <!-- omit in toc -->
+
+This project serves as a starting point for anyone who wants to learn how to use PyTorch to perform
+deep learning tasks, such as image classification, semantic segmentation, etc.
 
 # Table of Contents <!-- omit in toc -->
 
