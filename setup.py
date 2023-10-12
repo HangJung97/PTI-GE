@@ -51,11 +51,11 @@ extras = {
 # the goal of the project is simplicity for researchers, don't want to add too much
 # engineer specific practices
 setup(
-    name="PTI-GE",
+    name="pytorch-hands-on",
     version="0.0.1",
-    description="Repository of PTI project for GE TDSI students of INSA Lyon",
-    author="Olivier Bernard <olivier.bernard@insa-lyon.fr>, Hang Jung Ling <hang-jung.ling@insa-lyon.fr>",
-    url="https://github.com/HangJung97/PTI-GE",
+    description="Repository to learn how to use PyTorch to perform deep learning tasks",
+    author="Hang Jung Ling <hang-jung.ling@insa-lyon.fr, Olivier Bernard <olivier.bernard@insa-lyon.fr>>",
+    url="https://github.com/creatis-myriad/pytorch-hands-on",
     license="MIT",
     packages=["src"],
     long_description=load_long_description(),

@@ -17,9 +17,9 @@
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![pre-commit](https://img.shields.io/badge/Pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
-[![code-quality](https://github.com/creatis-myriad/ASCENT/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/creatis-myriad/ASCENT/actions/workflows/code-quality-main.yaml)
+[![code-quality](https://github.com/creatis-myriad/pytorch-hands-on/actions/workflows/code-quality-main.yaml/badge.svg)](https://github.com/creatis-myriad/pytorch-hands-on/actions/workflows/code-quality-main.yaml)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/HangJung97/PTI-GE/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/creatis-myriad/pytorch-hands-on/blob/main/LICENSE)
 
 </div>
 
@@ -41,14 +41,14 @@ deep learning tasks, such as image classification, semantic segmentation, etc.
 1. Download the repository:
    ```bash
    # Clone project
-   git clone https://github.com/HangJung97/PTI-GE.git
-   cd PTI-GE
+   git clone https://github.com/creatis-myriad/pytorch-hands-on.git
+   cd pytorch-hands-on
    ```
 2. Create a virtual environment (Conda is strongly recommended):
    ```bash
    # Create conda environment
    conda env create -f environment.yaml
-   conda activate pti-ge
+   conda activate pytorch-hands-on
    ```
 3. If you already have a python environment set aside for this project and just want to install the
    dependencies, you can do that using the following command:
